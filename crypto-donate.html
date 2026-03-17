@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CryptoDonate — Fund the Future</title>
+
+  <!-- ═══════════════════════════════════════════════
+       SECURITY HEADERS (meta-equivalent for static/IPFS hosting)
+  ═══════════════════════════════════════════════ -->
+
+  <!-- Content Security Policy
+       - default-src: only self
+       - script-src: self + inline needed for particle canvas
+       - style-src: self + Google Fonts + inline styles
+       - font-src: Google Fonts CDN
+       - frame-src: NOWPayments only (donation widget)
+       - connect-src: self only
+       - img-src: self + data URIs
+       - object-src: none (blocks Flash/plugins)
+       - base-uri: self (prevents base tag hijacking)
+       - form-action: none (no forms)
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src https://fonts.gstatic.com;
+    frame-src https://nowpayments.io;
+    connect-src 'self';
+    img-src 'self' data:;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none';
+  ">
+
+  <!-- Prevents MIME-type sniffing attacks -->
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+
+  <!-- Referrer Policy: only send origin, never full URL -->
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+
+  <!-- Permissions Policy: disable unused browser APIs -->
+  <meta http-equiv="Permissions-Policy" content="
+    camera=(),
+    microphone=(),
+    geolocation=(),
+    payment=(self),
+    usb=(),
+    bluetooth=()
+  ">
+
+  <!-- Prevent this page from being iframed by others (clickjacking) -->
+  <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
+
+  <!-- Force HTTPS on browsers that cache HSTS (best-effort via meta) -->
+  <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains">
+
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --void: #03040a;
+      --deep: #070b14;
+      --panel: #0b1120;
+      --border: #1a2d4a;
+      --glow-c: #00e5ff;
+      --glow-g: #39ff14;
+      --glow-r: #ff2d55;
+      --glow-o: #ff9500;
+      --text: #c8d8f0;
+      --muted: #4a6080;
+      --bright: #e8f4ff;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--void);
+      color: var(--text);
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* ── GRID BACKGROUND ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    /* ── SCAN LINE ── */
+    body::after {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.12) 2px,
+        rgba(0,0,0,0.12) 4px
+      );
+      pointer-events: none;
+    }
+
+    /* ── CANVAS PARTICLES ── */
+    #particle-canvas {
+      position: fixed; inset: 0; z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── HEADER ── */
+    header {
+      position: relative; z-index: 10;
+      padding: 18px 40px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: rgba(7,11,20,0.85);
+      backdrop-filter: blur(12px);
+    }
+
+    .logo {
+      font-family: 'Orbitron', monospace;
+      font-weight: 900;
+      font-size: 1.3rem;
+      letter-spacing: 0.1em;
+      color: var(--bright);
+    }
+    .logo span { color: var(--glow-c); text-shadow: 0 0 12px var(--glow-c); }
+
+    .header-badge {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      color: var(--glow-g);
+      border: 1px solid rgba(57,255,20,0.3);
+      padding: 4px 10px;
+      animation: blink 2.4s step-end infinite;
+    }
+    @keyframes blink {
+      0%,100%{opacity:1} 50%{opacity:0.3}
+    }
+
+    .header-stats {
+      display: flex; gap: 28px;
+    }
+    .stat-item {
+      text-align: right;
+    }
+    .stat-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+    .stat-value {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--glow-c);
+      text-shadow: 0 0 8px rgba(0,229,255,0.5);
+    }
+
+    /* ── HERO ── */
+    .hero {
+      position: relative; z-index: 10;
+      text-align: center;
+      padding: 70px 20px 50px;
+    }
+
+    .hero-eyebrow {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.35em;
+      color: var(--glow-c);
+      text-transform: uppercase;
+      margin-bottom: 18px;
+      opacity: 0;
+      animation: fadeUp 0.8s 0.2s forwards;
+    }
+
+    .hero-title {
+      font-family: 'Orbitron', monospace;
+      font-weight: 900;
+      font-size: clamp(2.2rem, 6vw, 4.5rem);
+      line-height: 1.05;
+      color: var(--bright);
+      margin-bottom: 22px;
+      opacity: 0;
+      animation: fadeUp 0.8s 0.4s forwards;
+    }
+    .hero-title .accent {
+      color: transparent;
+      -webkit-text-stroke: 1px var(--glow-c);
+      text-shadow: none;
+    }
+    .hero-title .glow {
+      color: var(--glow-c);
+      text-shadow: 0 0 30px rgba(0,229,255,0.6), 0 0 60px rgba(0,229,255,0.2);
+    }
+
+    .hero-sub {
+      max-width: 560px;
+      margin: 0 auto 40px;
+      font-size: 1.05rem;
+      line-height: 1.7;
+      color: var(--muted);
+      font-weight: 300;
+      letter-spacing: 0.03em;
+      opacity: 0;
+      animation: fadeUp 0.8s 0.6s forwards;
+    }
+
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(20px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    /* ── TICKER ── */
+    .ticker-wrap {
+      position: relative; z-index: 10;
+      overflow: hidden;
+      background: rgba(0,229,255,0.04);
+      border-top: 1px solid rgba(0,229,255,0.1);
+      border-bottom: 1px solid rgba(0,229,255,0.1);
+      padding: 8px 0;
+      margin-bottom: 60px;
+    }
+    .ticker {
+      display: flex; gap: 60px;
+      width: max-content;
+      animation: ticker 28s linear infinite;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+    }
+    @keyframes ticker {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+    .tick { color: var(--muted); }
+    .tick span { color: var(--glow-c); margin-left: 6px; }
+    .tick.up span { color: var(--glow-g); }
+    .tick.down span { color: var(--glow-r); }
+
+    /* ── MAIN LAYOUT ── */
+    .main-grid {
+      position: relative; z-index: 10;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 32px;
+      align-items: start;
+    }
+
+    @media (max-width: 820px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .widget-col { order: -1; }
+    }
+
+    /* ── PANELS ── */
+    .panel {
+      background: rgba(11,17,32,0.9);
+      border: 1px solid var(--border);
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(6px);
+    }
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--glow-c), transparent);
+      opacity: 0.6;
+    }
+
+    .panel-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--glow-c);
+      margin-bottom: 20px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .panel-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, var(--border), transparent);
+    }
+
+    /* ── MISSION ── */
+    .mission-text {
+      font-size: 1.0rem;
+      line-height: 1.8;
+      color: var(--text);
+      font-weight: 300;
+      margin-bottom: 24px;
+    }
+    .mission-text strong {
+      color: var(--bright);
+      font-weight: 600;
+    }
+
+    /* ── IMPACT GRID ── */
+    .impact-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .impact-card {
+      background: rgba(0,229,255,0.03);
+      border: 1px solid rgba(0,229,255,0.1);
+      padding: 16px 12px;
+      text-align: center;
+      transition: border-color 0.3s, background 0.3s;
+      cursor: default;
+    }
+    .impact-card:hover {
+      border-color: rgba(0,229,255,0.4);
+      background: rgba(0,229,255,0.06);
+    }
+    .impact-num {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.4rem;
+      font-weight: 900;
+      color: var(--glow-c);
+      text-shadow: 0 0 10px rgba(0,229,255,0.4);
+      display: block;
+    }
+    .impact-label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      display: block;
+      margin-top: 4px;
+    }
+
+    /* ── PROGRESS BAR ── */
+    .goal-section { margin-bottom: 28px; }
+    .goal-header {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 10px;
+    }
+    .goal-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .goal-amount {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.8rem;
+      color: var(--glow-c);
+    }
+    .progress-track {
+      height: 6px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--glow-c), #00ffaa);
+      box-shadow: 0 0 10px rgba(0,229,255,0.6);
+      width: 0%;
+      animation: fillBar 2s 1s cubic-bezier(0.22,1,0.36,1) forwards;
+    }
+    @keyframes fillBar {
+      to { width: 67%; }
+    }
+    .progress-glow {
+      position: absolute;
+      top: -2px; bottom: -2px;
+      width: 20px;
+      background: rgba(0,229,255,0.6);
+      filter: blur(6px);
+      animation: scanGlow 2s 1s cubic-bezier(0.22,1,0.36,1) forwards;
+      left: 0;
+    }
+    @keyframes scanGlow {
+      to { left: 67%; }
+    }
+
+    /* ── CRYPTO ACCEPTED ── */
+    .crypto-list {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .crypto-chip {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.65rem;
+      padding: 5px 10px;
+      background: rgba(0,229,255,0.05);
+      border: 1px solid rgba(0,229,255,0.15);
+      color: var(--text);
+      letter-spacing: 0.1em;
+      transition: all 0.2s;
+    }
+    .crypto-chip:hover {
+      background: rgba(0,229,255,0.12);
+      border-color: rgba(0,229,255,0.5);
+      color: var(--glow-c);
+      text-shadow: 0 0 6px rgba(0,229,255,0.5);
+    }
+    .crypto-chip.btc { border-color: rgba(255,149,0,0.3); color: var(--glow-o); }
+    .crypto-chip.eth { border-color: rgba(148,111,255,0.3); color: #9b6fff; }
+    .crypto-chip.xmr { border-color: rgba(255,106,0,0.3); color: #ff6a00; }
+
+    /* ── WHY CRYPTO ── */
+    .feature-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+    .feature-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      font-size: 0.9rem; line-height: 1.6; color: var(--text);
+    }
+    .feature-icon {
+      font-size: 1rem;
+      margin-top: 2px;
+      flex-shrink: 0;
+      filter: drop-shadow(0 0 4px var(--glow-c));
+    }
+
+    /* ── WIDGET COLUMN ── */
+    .widget-col { position: sticky; top: 24px; }
+
+    .widget-wrap {
+      background: rgba(11,17,32,0.95);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(8px);
+    }
+    .widget-wrap::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--glow-g), var(--glow-c), var(--glow-r));
+    }
+    .widget-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .widget-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--bright);
+    }
+    .live-badge {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.58rem;
+      letter-spacing: 0.15em;
+      color: var(--glow-g);
+      display: flex; align-items: center; gap: 5px;
+    }
+    .live-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--glow-g);
+      box-shadow: 0 0 6px var(--glow-g);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)}
+    }
+
+    .widget-inner {
+      padding: 16px;
+      display: flex;
+      justify-content: center;
+    }
+    .widget-inner iframe {
+      border-radius: 2px;
+      display: block;
+    }
+
+    .widget-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .widget-footer-text {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.58rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+    .shield-icon { font-size: 0.75rem; filter: drop-shadow(0 0 4px var(--glow-g)); }
+
+    /* ── TRUST STRIP ── */
+    .trust-strip {
+      position: relative; z-index: 10;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 700px) {
+      .trust-strip { grid-template-columns: repeat(2,1fr); }
+    }
+    .trust-card {
+      background: rgba(11,17,32,0.7);
+      border: 1px solid var(--border);
+      padding: 20px 16px;
+      text-align: center;
+      transition: transform 0.3s, border-color 0.3s;
+    }
+    .trust-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(0,229,255,0.3);
+    }
+    .trust-icon { font-size: 1.6rem; display: block; margin-bottom: 8px; }
+    .trust-heading {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      color: var(--bright);
+      margin-bottom: 6px;
+    }
+    .trust-desc {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      position: relative; z-index: 10;
+      border-top: 1px solid var(--border);
+      padding: 28px 40px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 16px;
+      background: rgba(7,11,20,0.85);
+    }
+    .footer-brand {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--bright);
+    }
+    .footer-brand span { color: var(--glow-c); }
+    .footer-copy {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+    .footer-links {
+      display: flex; gap: 20px;
+    }
+    .footer-links a {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      text-decoration: none;
+      text-transform: uppercase;
+      transition: color 0.2s;
+    }
+    .footer-links a:hover { color: var(--glow-c); }
+
+    /* ── CORNER DECORATION ── */
+    .corner-deco {
+      position: absolute;
+      width: 16px; height: 16px;
+    }
+    .corner-deco.tl { top: 0; left: 0; border-top: 2px solid var(--glow-c); border-left: 2px solid var(--glow-c); }
+    .corner-deco.tr { top: 0; right: 0; border-top: 2px solid var(--glow-c); border-right: 2px solid var(--glow-c); }
+    .corner-deco.bl { bottom: 0; left: 0; border-bottom: 2px solid var(--glow-c); border-left: 2px solid var(--glow-c); }
+    .corner-deco.br { bottom: 0; right: 0; border-bottom: 2px solid var(--glow-c); border-right: 2px solid var(--glow-c); }
+
+    /* ── SEPARATOR ── */
+    .hex-sep {
+      position: relative; z-index: 10;
+      text-align: center;
+      margin: 0 auto 40px;
+      max-width: 1100px;
+      padding: 0 24px;
+    }
+    .hex-sep-line {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+    }
+
+    /* ── INFO COLUMNS ── */
+    .info-cols {
+      position: relative; z-index: 10;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px 60px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+    @media (max-width: 700px) {
+      .info-cols { grid-template-columns: 1fr; }
+      header { padding: 14px 20px; }
+      .header-stats { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="particle-canvas"></canvas>
+
+<!-- HEADER -->
+<header>
+  <div style="display:flex;align-items:center;gap:20px;">
+    <div class="logo">CRYPTO<span>DONATE</span></div>
+    <div class="header-badge">● LIVE</div>
+  </div>
+  <div class="header-stats">
+    <div class="stat-item">
+      <div class="stat-label">Network</div>
+      <div class="stat-value">MULTI-CHAIN</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">Secured By</div>
+      <div class="stat-value">NOWPAYMENTS</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">Status</div>
+      <div class="stat-value" style="color:var(--glow-g);text-shadow:0 0 8px rgba(57,255,20,0.5);">ONLINE</div>
+    </div>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">// Decentralized — Transparent — Borderless</div>
+  <h1 class="hero-title">
+    <span class="accent">FUND</span> THE<br>
+    <span class="glow">FUTURE</span>
+  </h1>
+  <p class="hero-sub">
+    Support our mission through direct crypto donations. No banks, no borders, no middlemen — just trustless, transparent giving powered by blockchain technology.
+  </p>
+</section>
+
+<!-- TICKER -->
+<div class="ticker-wrap">
+  <div class="ticker">
+    <div class="tick up">BTC <span>▲ $84,210</span></div>
+    <div class="tick up">ETH <span>▲ $3,942</span></div>
+    <div class="tick down">XMR <span>▼ $187</span></div>
+    <div class="tick up">USDT <span>▲ $1.00</span></div>
+    <div class="tick up">SOL <span>▲ $201</span></div>
+    <div class="tick up">DOGE <span>▲ $0.38</span></div>
+    <div class="tick down">LTC <span>▼ $92</span></div>
+    <div class="tick up">BNB <span>▲ $612</span></div>
+    <!-- duplicate for seamless loop -->
+    <div class="tick up">BTC <span>▲ $84,210</span></div>
+    <div class="tick up">ETH <span>▲ $3,942</span></div>
+    <div class="tick down">XMR <span>▼ $187</span></div>
+    <div class="tick up">USDT <span>▲ $1.00</span></div>
+    <div class="tick up">SOL <span>▲ $201</span></div>
+    <div class="tick up">DOGE <span>▲ $0.38</span></div>
+    <div class="tick down">LTC <span>▼ $92</span></div>
+    <div class="tick up">BNB <span>▲ $612</span></div>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main-grid">
+
+  <!-- LEFT COLUMN -->
+  <div class="left-col">
+
+    <!-- MISSION -->
+    <div class="panel" style="margin-bottom:24px;">
+      <div class="corner-deco tl"></div><div class="corner-deco tr"></div>
+      <div class="corner-deco bl"></div><div class="corner-deco br"></div>
+      <div class="panel-title">// Our Mission</div>
+      <p class="mission-text">
+        We believe in a <strong>decentralized future</strong> where technology serves humanity — not corporations. Every crypto donation goes directly toward open-source development, community infrastructure, and digital rights advocacy.
+      </p>
+      <p class="mission-text">
+        Crypto donations ensure <strong>zero transaction censorship</strong>, instant cross-border transfers, and complete donor transparency via on-chain records. Your contribution is permanently verifiable.
+      </p>
+
+      <!-- PROGRESS -->
+      <div class="goal-section">
+        <div class="goal-header">
+          <span class="goal-label">// Q2 2026 Funding Goal</span>
+          <span class="goal-amount">$67,420 / $100,000</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill"></div>
+          <div class="progress-glow"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;">
+          <span style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:var(--muted);">0%</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:var(--glow-g);">67% FUNDED</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:var(--muted);">100%</span>
+        </div>
+      </div>
+
+      <!-- IMPACT -->
+      <div class="panel-title">// Impact Metrics</div>
+      <div class="impact-grid">
+        <div class="impact-card">
+          <span class="impact-num">1.2K+</span>
+          <span class="impact-label">Donors</span>
+        </div>
+        <div class="impact-card">
+          <span class="impact-num">$340K</span>
+          <span class="impact-label">Total Raised</span>
+        </div>
+        <div class="impact-card">
+          <span class="impact-num">50+</span>
+          <span class="impact-label">Countries</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCEPTED CRYPTO -->
+    <div class="panel" style="margin-bottom:24px;">
+      <div class="corner-deco tl"></div><div class="corner-deco tr"></div>
+      <div class="corner-deco bl"></div><div class="corner-deco br"></div>
+      <div class="panel-title">// Accepted Currencies</div>
+      <div class="crypto-list">
+        <span class="crypto-chip btc">₿ BTC</span>
+        <span class="crypto-chip eth">Ξ ETH</span>
+        <span class="crypto-chip xmr">ɱ XMR</span>
+        <span class="crypto-chip">◎ SOL</span>
+        <span class="crypto-chip">₮ USDT</span>
+        <span class="crypto-chip">Ð DOGE</span>
+        <span class="crypto-chip">Ł LTC</span>
+        <span class="crypto-chip">⬡ BNB</span>
+        <span class="crypto-chip">● USDC</span>
+        <span class="crypto-chip">◈ MATIC</span>
+        <span class="crypto-chip">↕ XRP</span>
+        <span class="crypto-chip">◆ ADA</span>
+      </div>
+    </div>
+
+    <!-- WHY CRYPTO -->
+    <div class="panel">
+      <div class="corner-deco tl"></div><div class="corner-deco tr"></div>
+      <div class="corner-deco bl"></div><div class="corner-deco br"></div>
+      <div class="panel-title">// Why Crypto?</div>
+      <ul class="feature-list">
+        <li class="feature-item">
+          <span class="feature-icon">🔐</span>
+          <span><strong style="color:var(--bright);">Censorship-Resistant</strong> — No government, bank, or payment processor can freeze, block, or reverse your donation.</span>
+        </li>
+        <li class="feature-item">
+          <span class="feature-icon">🌐</span>
+          <span><strong style="color:var(--bright);">Globally Borderless</strong> — Send from anywhere on Earth in seconds, with no geographical restrictions or currency conversion friction.</span>
+        </li>
+        <li class="feature-item">
+          <span class="feature-icon">⛓️</span>
+          <span><strong style="color:var(--bright);">On-Chain Transparency</strong> — Every donation is permanently recorded on a public ledger. Full accountability, zero opacity.</span>
+        </li>
+        <li class="feature-item">
+          <span class="feature-icon">💸</span>
+          <span><strong style="color:var(--bright);">Minimal Fees</strong> — 95–99% of your donation reaches us directly. No chargebacks, no intermediary cuts.</span>
+        </li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- RIGHT / WIDGET COLUMN -->
+  <div class="widget-col">
+    <div class="widget-wrap">
+      <div class="widget-header">
+        <div class="widget-title">Donate Now</div>
+        <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+      </div>
+      <div class="widget-inner">
+        <iframe
+          src="https://nowpayments.io/embeds/donation-widget?api_key=cd31cdfc-be6a-4280-a677-e33b0ad24f10"
+          width="346"
+          height="623"
+          frameborder="0"
+          scrolling="no"
+          loading="eager"
+          title="NOWPayments Crypto Donation Widget"
+          referrerpolicy="strict-origin-when-cross-origin"
+          allow="payment https://nowpayments.io; clipboard-write https://nowpayments.io"
+          style="overflow-y:hidden;display:block;border:0;">
+          Can't load widget
+        </iframe>
+      </div>
+      <div class="widget-footer">
+        <span class="shield-icon">🛡</span>
+        <span class="widget-footer-text">SECURED &amp; PROCESSED BY NOWPAYMENTS.IO</span>
+      </div>
+    </div>
+
+    <!-- QUICK FACTS BELOW WIDGET -->
+    <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px;">
+      <div style="background:rgba(11,17,32,0.9);border:1px solid var(--border);padding:14px 16px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:1.1rem;">⚡</span>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:0.65rem;letter-spacing:0.12em;color:var(--bright);margin-bottom:3px;">INSTANT CONFIRMATION</div>
+          <div style="font-size:0.75rem;color:var(--muted);">Payments confirmed on-chain within minutes</div>
+        </div>
+      </div>
+      <div style="background:rgba(11,17,32,0.9);border:1px solid var(--border);padding:14px 16px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:1.1rem;">🔒</span>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:0.65rem;letter-spacing:0.12em;color:var(--bright);margin-bottom:3px;">NON-CUSTODIAL</div>
+          <div style="font-size:0.75rem;color:var(--muted);">Funds go directly to verified wallet addresses</div>
+        </div>
+      </div>
+      <div style="background:rgba(11,17,32,0.9);border:1px solid var(--border);padding:14px 16px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:1.1rem;">📋</span>
+        <div>
+          <div style="font-family:'Orbitron',monospace;font-size:0.65rem;letter-spacing:0.12em;color:var(--bright);margin-bottom:3px;">RECEIPT AVAILABLE</div>
+          <div style="font-size:0.75rem;color:var(--muted);">Email confirmation sent for every donation</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TRUST STRIP -->
+<div class="trust-strip">
+  <div class="trust-card">
+    <span class="trust-icon">🔐</span>
+    <div class="trust-heading">SSL Encrypted</div>
+    <div class="trust-desc">All data encrypted end-to-end with TLS 1.3</div>
+  </div>
+  <div class="trust-card">
+    <span class="trust-icon">🌍</span>
+    <div class="trust-heading">Global Reach</div>
+    <div class="trust-desc">Accept donations from 180+ countries instantly</div>
+  </div>
+  <div class="trust-card">
+    <span class="trust-icon">⚙️</span>
+    <div class="trust-heading">Powered by NOW</div>
+    <div class="trust-desc">NOWPayments enterprise-grade infrastructure</div>
+  </div>
+  <div class="trust-card">
+    <span class="trust-icon">📊</span>
+    <div class="trust-heading">Fully Auditable</div>
+    <div class="trust-desc">On-chain records for every transaction ever made</div>
+  </div>
+</div>
+
+<!-- SEPARATOR -->
+<div class="hex-sep"><div class="hex-sep-line"></div></div>
+
+<!-- INFO COLUMNS -->
+<div class="info-cols">
+  <div class="panel">
+    <div class="corner-deco tl"></div><div class="corner-deco br"></div>
+    <div class="panel-title">// How It Works</div>
+    <ul class="feature-list">
+      <li class="feature-item"><span class="feature-icon" style="color:var(--glow-c);font-style:normal;font-family:'Orbitron',monospace;font-size:0.75rem;">01</span><span>Select your preferred cryptocurrency from the widget above.</span></li>
+      <li class="feature-item"><span class="feature-icon" style="color:var(--glow-c);font-style:normal;font-family:'Orbitron',monospace;font-size:0.75rem;">02</span><span>Enter your donation amount in USD, EUR, or crypto units.</span></li>
+      <li class="feature-item"><span class="feature-icon" style="color:var(--glow-c);font-style:normal;font-family:'Orbitron',monospace;font-size:0.75rem;">03</span><span>Scan the generated QR code or copy the wallet address.</span></li>
+      <li class="feature-item"><span class="feature-icon" style="color:var(--glow-c);font-style:normal;font-family:'Orbitron',monospace;font-size:0.75rem;">04</span><span>Send from any compatible wallet — confirmation in minutes.</span></li>
+    </ul>
+  </div>
+  <div class="panel">
+    <div class="corner-deco tl"></div><div class="corner-deco br"></div>
+    <div class="panel-title">// Where Funds Go</div>
+    <ul class="feature-list">
+      <li class="feature-item"><span class="feature-icon">🛠</span><span><strong style="color:var(--bright);">40% Development</strong> — Core protocol engineering and open-source tooling.</span></li>
+      <li class="feature-item"><span class="feature-icon">📣</span><span><strong style="color:var(--bright);">25% Outreach</strong> — Community education, events, and digital rights campaigns.</span></li>
+      <li class="feature-item"><span class="feature-icon">🏗</span><span><strong style="color:var(--bright);">25% Infrastructure</strong> — Servers, nodes, bandwidth, and security audits.</span></li>
+      <li class="feature-item"><span class="feature-icon">💼</span><span><strong style="color:var(--bright);">10% Operations</strong> — Legal, compliance, and administrative costs.</span></li>
+    </ul>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-brand">CRYPTO<span>DONATE</span></div>
+  <div class="footer-links">
+    <a href="#" rel="noopener noreferrer">Privacy</a>
+    <a href="#" rel="noopener noreferrer">Terms</a>
+    <a href="#" rel="noopener noreferrer">Whitepaper</a>
+    <a href="#" rel="noopener noreferrer">Contact</a>
+  </div>
+  <div class="footer-copy">© 2026 CRYPTODONATE — ALL RIGHTS RESERVED</div>
+</footer>
+
+<!-- PARTICLE SCRIPT -->
+<script>
+(function() {
+  const canvas = document.getElementById('particle-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [];
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function Particle() {
+    this.reset();
+  }
+  Particle.prototype.reset = function() {
+    this.x = Math.random() * W;
+    this.y = Math.random() * H;
+    this.vx = (Math.random() - 0.5) * 0.4;
+    this.vy = (Math.random() - 0.5) * 0.4;
+    this.r = Math.random() * 1.5 + 0.3;
+    this.a = Math.random() * 0.5 + 0.1;
+    this.color = Math.random() > 0.7
+      ? `rgba(57,255,20,${this.a})`
+      : `rgba(0,229,255,${this.a})`;
+  };
+  Particle.prototype.update = function() {
+    this.x += this.vx;
+    this.y += this.vy;
+    if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) this.reset();
+  };
+
+  for (let i = 0; i < 80; i++) particles.push(new Particle());
+
+  function drawConnections() {
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 120) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(0,229,255,${0.06 * (1 - dist/120)})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  function loop() {
+    ctx.clearRect(0, 0, W, H);
+    particles.forEach(p => {
+      p.update();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+    });
+    drawConnections();
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+</script>
+
+</body>
+</html>
